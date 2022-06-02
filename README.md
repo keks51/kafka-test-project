@@ -22,6 +22,7 @@ minikube start --driver=hyperkit \\
 9) kafka producer dag is running and sending messages to orders topic  
 10) check orders topic by:  
     ![Alt text](/images/go_to_kafka_ui.png)
+    ![Alt text](/images/kafka_ui.png)
 11) start 'kafka_app_spark' dag  
     ![Alt text](/images/start_kafka_app_dag.png)
 12) check logs  
