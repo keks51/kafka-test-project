@@ -39,9 +39,9 @@ spec:
               name: airflow-ui1
           volumeMounts:
             - name: dags-storage
-              mountPath: "/opt/dags"
+              mountPath: "/opt/airflow/dags"
             - name: jars-storage
-              mountPath: "/opt/jars"
+              mountPath: "/opt/airflow/jars"
             - name: hadoop-storage
               mountPath: "/spark_home"
             - name: hadoop-storage
@@ -92,7 +92,7 @@ spec:
             - name: hadoop-storage
               mountPath: "/hadoop_home"
             - name: jars-storage
-              mountPath: "/opt/jars"
+              mountPath: "/opt/airflow/jars"
         - image: bde2020/spark-worker:2.4.0-hadoop2.8-scala2.12
           name: spark-worker
           envFrom:
@@ -127,11 +127,11 @@ spec:
               value: /hadoop_home
           volumeMounts:
             - name: airflow-plugins
-              mountPath: "/opt/plugins"
+              mountPath: "/opt/airflow/plugins"
             - name: dags-storage
-              mountPath: "/opt/dags"
+              mountPath: "/opt/airflow/dags"
             - name: jars-storage
-              mountPath: "/opt/jars"
+              mountPath: "/opt/airflow/jars"
             - name: hadoop-storage
               mountPath: "/spark_home"
             - name: hadoop-storage
@@ -201,7 +201,7 @@ spec:
                     " echo 'Waiting for Kafka to be ready...' ;
                 cub kafka-ready -b localhost:9092 1 20 ;
                 kafka-topics --bootstrap-server localhost:9092 --topic orders --create ;
-                java -jar /opt/jars/kafka-app.jar producer localhost:9092 & " ]
+                java -jar /opt/airflow/jars/kafka-app.jar producer localhost:9092 & " ]
           readinessProbe:
             tcpSocket:
               port: 9092
@@ -223,16 +223,16 @@ spec:
       volumes:
         - name: postgres-init
           hostPath:
-            path: "/Users/Aleksei_Gomziakov/IdeaProjects/kafka-test-project/volume/postgres/init.sql"
+            path: "%PROJECT_HOME%/volume/postgres_scripts/init.sql"
         - name: dags-storage
           hostPath:
-            path: "/Users/Aleksei_Gomziakov/IdeaProjects/kafka-test-project/volume/dags"
+            path: "%PROJECT_HOME%/volume/dags"
         - name: jars-storage
           hostPath:
-            path: "/Users/Aleksei_Gomziakov/IdeaProjects/kafka-test-project/volume/jars"
+            path: "%PROJECT_HOME%/volume/jars"
         - name: airflow-plugins
           hostPath:
-            path: "/Users/Aleksei_Gomziakov/IdeaProjects/kafka-test-project/volume/plugins"
+            path: "%PROJECT_HOME%/volume/plugins"
         - name: hadoop-storage
           persistentVolumeClaim:
             claimName: hadoop-storage-claim
@@ -272,3 +272,7 @@ spec:
       targetPort: 9000
       nodePort: 30006
       name: kafka-ui-port
+    - port: 5433 # postgres port
+      targetPort: 5433
+      nodePort: 30007
+      name: postgres-ui-port

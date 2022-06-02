@@ -8,3 +8,5 @@
 
 # Project exclude paths
 /app/target/
+/my/
+*.iml

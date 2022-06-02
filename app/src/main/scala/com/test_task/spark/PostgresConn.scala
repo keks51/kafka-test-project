@@ -2,6 +2,7 @@ package com.test_task.spark
 
 import java.sql.Connection
 import java.util.Properties
+import scala.util.Try
 
 
 object PostgresConn {
@@ -14,7 +15,7 @@ object PostgresConn {
                             postgresOffsetTable: String)
 
 
-  def withConn(config: PostgresConfig)(func: Connection => Unit): Unit = {
+  def withConn(config: PostgresConfig)(func: Connection => Unit): Try[Unit] = Try {
     val PostgresConfig(host, port, user, pass, db, _) = config
     import java.sql.DriverManager
     val url = s"jdbc:postgresql://$host:$port/$db"

@@ -13,12 +13,10 @@ import scala.util.Try
 
 object SparkRW extends LogSupport {
 
-  def withSparkSession(appName: String, hdfsHost: String)(f: SparkSession => Unit): Unit = {
+  def withSparkSession(appName: String, hdfsHost: String)(f: SparkSession => Unit): Try[Unit] = Try {
     val spark = SparkSession
       .builder()
       .appName(appName)
-      .master("local[*]")
-      .config("spark.port.maxRetries", 100)
       .getOrCreate()
     spark.conf.set("fs.defaultFS", hdfsHost)
     f(spark)
