@@ -1,0 +1,274 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hadoop
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hadoop
+  template:
+    metadata:
+      labels:
+        app: hadoop
+    spec:
+      containers:
+        - image: apache/airflow:2.1.1-python3.7
+          name: airflow-webserver
+          env:
+            - name: _AIRFLOW_DB_UPGRADE
+              value: "true"
+            - name: _AIRFLOW_WWW_USER_CREATE
+              value: "true"
+            - name: _AIRFLOW_WWW_USER_PASSWORD
+              value: admin
+            - name: AIRFLOW_COMMAND
+              value: python
+            - name: AIRFLOW__CORE__EXECUTOR
+              value: LocalExecutor
+            - name: AIRFLOW__CORE__SQL_ALCHEMY_CONN
+              value: postgresql+psycopg2://airflow:airflow@0.0.0.0/airflow
+            - name: SPARK_HOME
+              value: /spark_home
+            - name: JAVA_HOME
+              value: /java_home
+            - name: HADOOP_HOME
+              value: /hadoop_home
+          ports:
+            - containerPort: 8079
+              name: airflow-ui1
+          volumeMounts:
+            - name: dags-storage
+              mountPath: "/opt/dags"
+            - name: jars-storage
+              mountPath: "/opt/jars"
+            - name: hadoop-storage
+              mountPath: "/spark_home"
+            - name: hadoop-storage
+              mountPath: "/java_home"
+            - name: hadoop-storage
+              mountPath: "/hadoop_home"
+          command: [ "/bin/sh","-c", 'echo "export PATH="/hadoop_home/bin/:$PATH"" >> /home/.bashrc ; echo $PATH ; cd / ; ./entrypoint webserver -p 8079' ]
+        - image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+          name: namenode
+          envFrom:
+            - configMapRef:
+                name: hadoop-configmap
+          env:
+            - name: CLUSTER_NAME
+              value: test
+          ports:
+            - containerPort: 9870
+              name: namenode-iu
+        - image: bde2020/hadoop-datanode:1.1.0-hadoop2.8-java8
+          name: datanode1
+          envFrom:
+            - configMapRef:
+                name: hadoop-configmap
+          ports:
+            - containerPort: 50075
+              name: datanodeport1
+        - image: bde2020/spark-master:2.4.0-hadoop2.8-scala2.12
+          name: spark-master
+          envFrom:
+            - configMapRef:
+                name: hadoop-configmap
+          ports:
+            - containerPort: 8080
+              name: spark-m-p-1
+          lifecycle:
+            postStart:
+              exec:
+                command: [ "/bin/sh","-c",
+                    "cd / ;
+                 cp -r /spark/* /spark_home ;
+                 cp -r /docker-java-home/* /java_home ;
+                 cp -r /opt/hadoop-2.8.0/* /hadoop_home ;" ]
+          volumeMounts:
+            - name: hadoop-storage
+              mountPath: "/spark_home"
+            - name: hadoop-storage
+              mountPath: "/java_home"
+            - name: hadoop-storage
+              mountPath: "/hadoop_home"
+            - name: jars-storage
+              mountPath: "/opt/jars"
+        - image: bde2020/spark-worker:2.4.0-hadoop2.8-scala2.12
+          name: spark-worker
+          envFrom:
+            - configMapRef:
+                name: hadoop-configmap
+          env:
+            - name: CLUSTER_NAME
+              value: test
+          ports:
+            - containerPort: 8081
+              name: spark-w1-p-1
+        - image: apache/airflow:2.1.1-python3.7
+          name: airflow-scheduler
+          env:
+            - name: _AIRFLOW_WWW_USER_CREATE
+              value: "true"
+            - name: _AIRFLOW_WWW_USER_PASSWORD
+              value: admin
+            - name: _PIP_ADDITIONAL_REQUIREMENTS
+              value: apache-airflow-providers-apache-spark==2.1.3
+            - name: AIRFLOW_COMMAND
+              value: python
+            - name: AIRFLOW__CORE__EXECUTOR
+              value: LocalExecutor
+            - name: AIRFLOW__CORE__SQL_ALCHEMY_CONN
+              value: postgresql+psycopg2://airflow:airflow@0.0.0.0/airflow
+            - name: SPARK_HOME
+              value: /spark_home
+            - name: JAVA_HOME
+              value: /java_home
+            - name: HADOOP_HOME
+              value: /hadoop_home
+          volumeMounts:
+            - name: airflow-plugins
+              mountPath: "/opt/plugins"
+            - name: dags-storage
+              mountPath: "/opt/dags"
+            - name: jars-storage
+              mountPath: "/opt/jars"
+            - name: hadoop-storage
+              mountPath: "/spark_home"
+            - name: hadoop-storage
+              mountPath: "/java_home"
+            - name: hadoop-storage
+              mountPath: "/hadoop_home"
+          command: [ "/bin/sh","-c", 'export PATH="/hadoop_home/bin/:$PATH" ; echo "export PATH="/hadoop_home/bin/:$PATH"" >> /home/.bashrc ; echo $PATH ; cd / ; ./entrypoint scheduler' ]
+        - image: postgres:13
+          name: postgres-airflow
+          env:
+            - name: POSTGRES_USER
+              value: airflow
+            - name: POSTGRES_PASSWORD
+              value: airflow
+            - name: POSTGRES_DB
+              value: airflow
+        - image: postgres:13
+          name: postgres-app
+          env:
+            - name: POSTGRES_USER
+              value: root
+            - name: POSTGRES_PASSWORD
+              value: root
+            - name: POSTGRES_DB
+              value: kafka_app
+            - name: PGPORT
+              value: "5433"
+          volumeMounts:
+            - name: postgres-init
+              mountPath: "/docker-entrypoint-initdb.d/init.sql"
+        - image: confluentinc/cp-zookeeper:6.2.0
+          name: zookeeper
+          env:
+            - name: ZOOKEEPER_CLIENT_PORT
+              value: "2181"
+            - name: ZOOKEEPER_TICK_TIME
+              value: "2000"
+            - name: ZOOKEEPER_ADMIN_SERVER_PORT
+              value: "9999"
+        - image: confluentinc/cp-kafka:6.2.0
+          name: broker
+          env:
+            - name: KAFKA_BROKER_ID
+              value: "1"
+            - name: KAFKA_ZOOKEEPER_CONNECT
+              value: "0.0.0.0:2181"
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: PLAINTEXT://localhost:29092,PLAINTEXT_HOST://localhost:9092
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS
+              value: "0"
+            - name: KAFKA_JMX_PORT
+              value: "9101"
+            - name: KAFKA_JMX_HOSTNAME
+              value: "0.0.0.0"
+          lifecycle:
+            postStart:
+              exec:
+                command: [ "/bin/sh","-c",
+                    " echo 'Waiting for Kafka to be ready...' ;
+                cub kafka-ready -b localhost:9092 1 20 ;
+                kafka-topics --bootstrap-server localhost:9092 --topic orders --create ;
+                java -jar /opt/jars/kafka-app.jar producer localhost:9092 & " ]
+          readinessProbe:
+            tcpSocket:
+              port: 9092
+            timeoutSeconds: 500
+            periodSeconds: 500
+            initialDelaySeconds: 40
+          livenessProbe:
+            exec:
+              command: [ "/bin/sh","-c",
+                  " kafka-broker-api-versions --bootstrap-server=localhost:9092 " ]
+            timeoutSeconds: 500
+            periodSeconds: 500
+            initialDelaySeconds: 70
+        - image: obsidiandynamics/kafdrop:latest
+          name: kafka-monitoring
+          env:
+            - name: KAFKA_BROKERCONNECT
+              value: "localhost:9092"
+      volumes:
+        - name: postgres-init
+          hostPath:
+            path: "/Users/Aleksei_Gomziakov/IdeaProjects/kafka-test-project/volume/postgres/init.sql"
+        - name: dags-storage
+          hostPath:
+            path: "/Users/Aleksei_Gomziakov/IdeaProjects/kafka-test-project/volume/dags"
+        - name: jars-storage
+          hostPath:
+            path: "/Users/Aleksei_Gomziakov/IdeaProjects/kafka-test-project/volume/jars"
+        - name: airflow-plugins
+          hostPath:
+            path: "/Users/Aleksei_Gomziakov/IdeaProjects/kafka-test-project/volume/plugins"
+        - name: hadoop-storage
+          persistentVolumeClaim:
+            claimName: hadoop-storage-claim
+        - name: java-home
+          persistentVolumeClaim:
+            claimName: hadoop-storage-claim
+        - name: hadoop-home
+          persistentVolumeClaim:
+            claimName: hadoop-storage-claim
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hadoop
+spec:
+  selector:
+    app: hadoop
+  type: LoadBalancer
+  ports:
+    - port: 9870 # UI port
+      targetPort: 9870
+      nodePort: 30003
+      name: namenode-ui-port
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30004
+      name: spark-ui-port1
+    - port: 8081
+      targetPort: 8081
+      nodePort: 30005
+      name: spark-w-port1
+    - port: 8079
+      targetPort: 8079
+      nodePort: 31001
+      name: airflow-ui
+    - port: 9000 # Kafka-manage ui port
+      targetPort: 9000
+      nodePort: 30006
+      name: kafka-ui-port
